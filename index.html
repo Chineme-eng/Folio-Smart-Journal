@@ -1,62 +1,90 @@
-Claude is AI and can make mistakes. Please double-check responses.
-import { useState, useEffect, useRef, useCallback } from "react";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Folio — Your Journal</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body,#root{height:100%;width:100%;}
+  body{overflow:hidden;}
+  ::placeholder{opacity:1;}
+  ::-webkit-scrollbar{width:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{border-radius:4px}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:4px;outline:none;cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback} = React;
 
+/* ─── constants ─── */
 const TEMPLATES = {
-  "Daily Reflection": `## Daily Reflection\n\n**What went well today?**\n\n\n**What could have gone better?**\n\n\n**What am I grateful for?**\n\n\n**Tomorrow's focus:**\n`,
-  "Gratitude Log": `## Gratitude Log\n\n1. I'm grateful for...\n2. I'm grateful for...\n3. I'm grateful for...\n\n**Why these matter to me:**\n`,
-  "Brain Dump": `## Brain Dump\n\n*Just let it all out — no filters, no structure.*\n\n`,
-  "Blank": ``
+  "Daily Reflection":`## Daily Reflection\n\n**What went well today?**\n\n\n**What could have gone better?**\n\n\n**What am I grateful for?**\n\n\n**Tomorrow's focus:**\n`,
+  "Gratitude Log":`## Gratitude Log\n\n1. I'm grateful for...\n2. I'm grateful for...\n3. I'm grateful for...\n\n**Why these matter to me:**\n`,
+  "Brain Dump":`## Brain Dump\n\n*Just let it all out — no filters, no structure.*\n\n`,
+  "Blank":``
 };
-
-const MOODS = ["😄","😊","😐","😔","😤"];
-const MOOD_LABELS = ["Great","Good","Okay","Low","Tense"];
-const ACCENT_COLORS = [
-  {name:"Sage",val:"#6B8F71"},
-  {name:"Slate",val:"#5C6B7A"},
-  {name:"Terracotta",val:"#B5654A"},
-  {name:"Plum",val:"#7B5EA7"},
-  {name:"Dusk",val:"#6B7BA4"},
-  {name:"Sand",val:"#A08C6E"},
+const MOODS=["😄","😊","😐","😔","😤"];
+const MOOD_LABELS=["Great","Good","Okay","Low","Tense"];
+const ACCENT_COLORS=[
+  {name:"Sage",val:"#6B8F71"},{name:"Slate",val:"#5C6B7A"},
+  {name:"Terracotta",val:"#B5654A"},{name:"Plum",val:"#7B5EA7"},
+  {name:"Dusk",val:"#6B7BA4"},{name:"Sand",val:"#A08C6E"},
 ];
-const TAGS_PALETTE = ["#6B8F71","#5C6B7A","#B5654A","#7B5EA7","#6B7BA4","#A08C6E","#7A9E9F","#C4843C"];
+const TAGS_PALETTE=["#6B8F71","#5C6B7A","#B5654A","#7B5EA7","#6B7BA4","#A08C6E","#7A9E9F","#C4843C"];
 
-const md = (text) => {
-  if (!text) return "";
-  return text
-    .replace(/^### (.+)$/gm,'<h3 style="font-size:1em;font-weight:600;margin:.8em 0 .3em;color:var(--ink)">$1</h3>')
-    .replace(/^## (.+)$/gm,'<h2 style="font-size:1.15em;font-weight:600;margin:1em 0 .4em;color:var(--ink)">$1</h2>')
-    .replace(/^# (.+)$/gm,'<h1 style="font-size:1.4em;font-weight:600;margin:1em 0 .5em;color:var(--ink)">$1</h1>')
+/* ─── helpers ─── */
+const md = t => {
+  if(!t) return "";
+  return t
+    .replace(/^### (.+)$/gm,'<h3 style="font-size:1em;font-weight:600;margin:.8em 0 .3em">$1</h3>')
+    .replace(/^## (.+)$/gm,'<h2 style="font-size:1.15em;font-weight:600;margin:1em 0 .4em">$1</h2>')
+    .replace(/^# (.+)$/gm,'<h1 style="font-size:1.4em;font-weight:600;margin:1em 0 .5em">$1</h1>')
     .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
     .replace(/\*(.+?)\*/g,'<em>$1</em>')
-    .replace(/`(.+?)`/g,'<code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:.88em;font-family:monospace">$1</code>')
+    .replace(/`(.+?)`/g,'<code style="background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px;font-size:.88em;font-family:monospace">$1</code>')
     .replace(/^[-•] (.+)$/gm,'<li style="margin:.25em 0">$1</li>')
     .replace(/\n/g,'<br/>');
 };
-
 const wc = t => t.trim() ? t.trim().split(/\s+/).length : 0;
 const rt = t => Math.max(1, Math.ceil(wc(t)/200));
 const fmtDate = iso => new Date(iso).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
 const dayStr = iso => iso.slice(0,10);
 const today = () => new Date().toISOString().slice(0,10);
 
-function PinModal({onUnlock}){
+/* ─── storage (localStorage fallback) ─── */
+const store = {
+  get: k => { try{ const v=localStorage.getItem(k); return v?{value:v}:null; }catch(e){return null;} },
+  set: (k,v) => { try{ localStorage.setItem(k,v); }catch(e){} }
+};
+
+/* ─── PIN modal ─── */
+function PinModal({onUnlock,surface,border,ink,ink2,accent}){
   const [v,setV]=useState(""); const [err,setErr]=useState(false);
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(30,24,20,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,backdropFilter:"blur(3px)"}}>
-      <div style={{background:"var(--surface)",borderRadius:18,padding:"36px 40px",minWidth:320,textAlign:"center",border:"1px solid var(--border)"}}>
-        <div style={{width:48,height:48,borderRadius:"50%",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:20}}>🔒</div>
-        <h2 style={{color:"var(--ink)",fontWeight:600,fontSize:17,marginBottom:6}}>Your journal is locked</h2>
-        <p style={{color:"var(--ink2)",fontSize:13,marginBottom:20}}>Enter your PIN to continue</p>
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(30,24,20,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}}>
+      <div style={{background:surface,borderRadius:18,padding:"36px 40px",minWidth:320,textAlign:"center",border:`1px solid ${border}`}}>
+        <div style={{width:48,height:48,borderRadius:"50%",background:"rgba(0,0,0,.06)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:22}}>🔒</div>
+        <h2 style={{color:ink,fontWeight:600,fontSize:17,marginBottom:6,fontFamily:"system-ui"}}>Your journal is locked</h2>
+        <p style={{color:ink2,fontSize:13,marginBottom:20,fontFamily:"system-ui"}}>Enter your PIN to continue</p>
         <input type="password" placeholder="PIN" value={v} onChange={e=>setV(e.target.value)} onKeyDown={e=>e.key==="Enter"&&onUnlock(v,setErr)}
-          style={{width:"100%",padding:"10px 14px",borderRadius:10,border:`1.5px solid ${err?"#B5654A":"var(--border)"}`,background:"var(--bg)",color:"var(--ink)",fontSize:16,textAlign:"center",letterSpacing:6,boxSizing:"border-box",outline:"none"}}/>
-        {err&&<p style={{color:"#B5654A",fontSize:12,marginTop:8}}>Incorrect PIN</p>}
-        <button onClick={()=>onUnlock(v,setErr)} style={{marginTop:14,width:"100%",padding:"11px",borderRadius:10,background:"var(--accent)",color:"#fff",border:"none",fontSize:14,fontWeight:600,cursor:"pointer",letterSpacing:.3}}>Unlock</button>
+          style={{width:"100%",padding:"10px 14px",borderRadius:10,border:`1.5px solid ${err?"#B5654A":border}`,background:"transparent",color:ink,fontSize:16,textAlign:"center",letterSpacing:6,boxSizing:"border-box",outline:"none",fontFamily:"system-ui"}}/>
+        {err&&<p style={{color:"#B5654A",fontSize:12,marginTop:8,fontFamily:"system-ui"}}>Incorrect PIN</p>}
+        <button onClick={()=>onUnlock(v,setErr)} style={{marginTop:14,width:"100%",padding:11,borderRadius:10,background:accent,color:"#fff",border:"none",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"system-ui"}}>Unlock</button>
       </div>
     </div>
   );
 }
 
-export default function App(){
+/* ─── main app ─── */
+function App(){
   const [entries,setEntries]=useState([]);
   const [tags,setTags]=useState([]);
   const [dark,setDark]=useState(false);
@@ -85,36 +113,43 @@ export default function App(){
   const autoRef=useRef(null);
   const notifRef=useRef(null);
 
+  /* theme */
+  const bgBase = dark?"#1C1814":"#F7F3EC";
+  const surface = dark?"#241F1A":"#FDFAF5";
+  const surface2 = dark?"#2E2820":"#F0EBE1";
+  const border = dark?"#3A322A":"#E2D9CC";
+  const ink = dark?"#E8E0D4":"#2C2416";
+  const ink2 = dark?"#9A9080":"#8A7D6B";
+  const ink3 = dark?"#6A6058":"#B5A898";
+
+  /* load */
   useEffect(()=>{
-    (async()=>{
-      try{
-        const s=await window.storage.get("folio_v2");
-        if(s){const d=JSON.parse(s.value);
-          setEntries(d.entries||[]); setTags(d.tags||[]); setDark(d.dark??false);
-          setAccent(d.accent||"#6B8F71"); setFontSize(d.fontSize||15);
-          setReminder(d.reminder||""); setReminderOn(d.reminderOn||false);
-          setPinEnabled(d.pinEnabled||false); setPin(d.pin||"");
-          if(d.pinEnabled)setLocked(true);
-        }
-      }catch(e){}
-    })();
+    const s=store.get("folio_v2");
+    if(s){
+      const d=JSON.parse(s.value);
+      setEntries(d.entries||[]); setTags(d.tags||[]); setDark(d.dark??false);
+      setAccent(d.accent||"#6B8F71"); setFontSize(d.fontSize||15);
+      setReminder(d.reminder||""); setReminderOn(d.reminderOn||false);
+      setPinEnabled(d.pinEnabled||false); setPin(d.pin||"");
+      if(d.pinEnabled) setLocked(true);
+    }
   },[]);
 
-  const save=useCallback(async(patch={})=>{
+  const save=useCallback((patch={})=>{
     const s={entries,tags,dark,accent,fontSize,reminder,reminderOn,pinEnabled,pin,...patch};
-    try{await window.storage.set("folio_v2",JSON.stringify(s));}catch(e){}
+    store.set("folio_v2",JSON.stringify(s));
   },[entries,tags,dark,accent,fontSize,reminder,reminderOn,pinEnabled,pin]);
 
   useEffect(()=>{
-    if(!editing)return;
-    if(autoRef.current)clearTimeout(autoRef.current);
+    if(!editing) return;
+    if(autoRef.current) clearTimeout(autoRef.current);
     autoRef.current=setTimeout(()=>save(),1800);
     return()=>clearTimeout(autoRef.current);
   },[draft,editing]);
 
   useEffect(()=>{
-    if(!reminderOn||!reminder)return;
-    if(notifRef.current)clearInterval(notifRef.current);
+    if(!reminderOn||!reminder) return;
+    if(notifRef.current) clearInterval(notifRef.current);
     notifRef.current=setInterval(()=>{
       const n=new Date(); const[h,m]=reminder.split(":").map(Number);
       if(n.getHours()===h&&n.getMinutes()===m&&Notification.permission==="granted")
@@ -128,40 +163,31 @@ export default function App(){
     setOnThisDay(entries.filter(e=>e.date.slice(5,10)===t&&e.date.slice(0,10)!==today()));
   },[entries]);
 
-  const bgBase = dark ? "#1C1814" : "#F7F3EC";
-  const surface = dark ? "#241F1A" : "#FDFAF5";
-  const surface2 = dark ? "#2E2820" : "#F0EBE1";
-  const border = dark ? "#3A322A" : "#E2D9CC";
-  const ink = dark ? "#E8E0D4" : "#2C2416";
-  const ink2 = dark ? "#9A9080" : "#8A7D6B";
-  const ink3 = dark ? "#6A6058" : "#B5A898";
+  /* dynamic styles injected once */
+  useEffect(()=>{
+    const el=document.getElementById("folio-dynamic")||document.createElement("style");
+    el.id="folio-dynamic";
+    el.textContent=`
+      body{background:${bgBase};color:${ink};}
+      ::-webkit-scrollbar-thumb{background:${border};}
+      ::placeholder{color:${ink3};}
+      input[type=range]{background:${surface2};}
+      input[type=range]::-webkit-slider-thumb{background:${accent};}
+    `;
+    document.head.appendChild(el);
+  },[dark,accent]);
 
-  const css=`
-    *{box-sizing:border-box;margin:0;padding:0;}
-    :root{--bg:${bgBase};--surface:${surface};--surface2:${surface2};--border:${border};--ink:${ink};--ink2:${ink2};--ink3:${ink3};--accent:${accent};--accent-soft:${accent}18;}
-    body{font-family:'Georgia',serif;background:var(--bg);color:var(--ink);font-size:${fontSize}px;line-height:1.7;}
-    ::placeholder{color:var(--ink3);}
-    ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
-    input,textarea{font-family:'Georgia',serif;}
-    button{font-family:system-ui,sans-serif;transition:opacity .15s,transform .1s;}
-    button:active{transform:scale(0.97);}
-  `;
-
-  const filtered=entries.filter(e=>{
-    const q=search.toLowerCase();
-    return(!q||e.title.toLowerCase().includes(q)||e.body.toLowerCase().includes(q))&&(!filterTag||e.tags.includes(filterTag));
-  }).sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)||new Date(b.date)-new Date(a.date));
-
-  const openNew=(tpl="Blank")=>{
-    setDraft({title:"",body:TEMPLATES[tpl],mood:1,tags:[],date:new Date().toISOString()});
+  /* entry ops */
+  const openNew=tpl=>{
+    setDraft({title:"",body:TEMPLATES[tpl||"Blank"],mood:1,tags:[],date:new Date().toISOString()});
     setSelected(null); setEditing(true); setPreview(false); setShowTemplate(false);
   };
   const openEntry=e=>{setSelected(e);setDraft({...e});setEditing(false);setPreview(false);};
   const saveEntry=()=>{
-    if(!draft.title.trim()&&!draft.body.trim())return;
+    if(!draft.title.trim()&&!draft.body.trim()) return;
     const now=new Date().toISOString(); let updated;
-    if(selected){updated=entries.map(e=>e.id===selected.id?{...draft,id:selected.id,date:selected.date,updated:now}:e);}
-    else{updated=[{...draft,id:Date.now(),date:now,pinned:false},...entries];}
+    if(selected) updated=entries.map(e=>e.id===selected.id?{...draft,id:selected.id,date:selected.date,updated:now}:e);
+    else updated=[{...draft,id:Date.now(),date:now,pinned:false},...entries];
     setEntries(updated); setEditing(false);
     setSelected(updated.find(e=>e.id===(selected?.id||updated[0].id)));
     save({entries:updated});
@@ -170,410 +196,399 @@ export default function App(){
   const togglePin=id=>{const u=entries.map(e=>e.id===id?{...e,pinned:!e.pinned}:e);setEntries(u);save({entries:u});};
   const exportEntries=()=>{
     const txt=entries.map(e=>`# ${e.title}\n${fmtDate(e.date)}  ·  ${MOODS[e.mood]} ${MOOD_LABELS[e.mood]}\nTags: ${e.tags.join(", ")||"—"}\n\n${e.body}`).join("\n\n────────────\n\n");
-    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:"text/plain"}));a.download="folio-export.txt";a.click();
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([txt],{type:"text/plain"}));
+    a.download="folio-export.txt"; a.click();
   };
   const addTag=()=>{
-    if(!newTagName.trim())return;
+    if(!newTagName.trim()) return;
     const u=[...tags,{name:newTagName.trim(),color:newTagColor,id:Date.now()}];
     setTags(u); setNewTagName(""); save({tags:u});
   };
   const handleUnlock=(inp,setErr)=>inp===pin?setLocked(false):setErr(true);
-  const enablePin=()=>{if(newPin.length<4)return;setPin(newPin);setPinEnabled(true);setShowPinSetup(false);setNewPin("");save({pin:newPin,pinEnabled:true});};
+  const enablePin=()=>{
+    if(newPin.length<4) return;
+    setPin(newPin); setPinEnabled(true); setShowPinSetup(false); setNewPin("");
+    save({pin:newPin,pinEnabled:true});
+  };
 
+  /* stats */
   const totalWords=entries.reduce((s,e)=>s+wc(e.body),0);
+  const avgLen=entries.length?Math.round(totalWords/entries.length):0;
   const streak=(()=>{const days=new Set(entries.map(e=>dayStr(e.date)));let s=0,d=new Date();while(days.has(d.toISOString().slice(0,10))){s++;d.setDate(d.getDate()-1);}return s;})();
   const longest=(()=>{const days=[...new Set(entries.map(e=>dayStr(e.date)))].sort();let max=0,cur=0,prev=null;days.forEach(d=>{if(prev){const df=(new Date(d)-new Date(prev))/86400000;cur=df===1?cur+1:1;}else cur=1;if(cur>max)max=cur;prev=d;});return max;})();
   const moodData=MOODS.map((m,i)=>({m,label:MOOD_LABELS[i],count:entries.filter(e=>e.mood===i).length}));
   const tagUsage=tags.map(t=>({...t,count:entries.filter(e=>e.tags.includes(t.name)).length}));
   const weekData=(()=>{const w={};entries.forEach(e=>{const d=new Date(e.date),wd=new Date(d);wd.setDate(d.getDate()-d.getDay());const k=wd.toISOString().slice(0,10);w[k]=(w[k]||0)+1;});return Object.entries(w).sort((a,b)=>a[0]<b[0]?1:-1).slice(0,8).reverse().map(([k,v])=>({week:k.slice(5),count:v}));})();
   const writtenToday=entries.some(e=>dayStr(e.date)===today());
-  const avgLen=entries.length?Math.round(totalWords/entries.length):0;
 
-  const btnBase={border:"none",cursor:"pointer",fontWeight:500,letterSpacing:.2};
-  const pill=(active,color)=>({...btnBase,padding:"3px 11px",borderRadius:20,fontSize:12,background:active?color:`${color}15`,color:active?"#fff":color,transition:"all .15s"});
+  const filtered=entries.filter(e=>{
+    const q=search.toLowerCase();
+    return(!q||e.title.toLowerCase().includes(q)||e.body.toLowerCase().includes(q))&&(!filterTag||e.tags.includes(filterTag));
+  }).sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)||new Date(b.date)-new Date(a.date));
+
+  /* style shortcuts */
+  const btn={border:"none",cursor:"pointer",fontWeight:500,letterSpacing:.2,fontFamily:"system-ui",transition:"opacity .15s"};
+  const pill=(active,color)=>({...btn,padding:"3px 11px",borderRadius:20,fontSize:12,background:active?color:`${color}18`,color:active?"#fff":color});
+  const card={background:surface,borderRadius:14,padding:"18px 20px",marginBottom:12,border:`1px solid ${border}`};
 
   return(
-    <>
-      <style>{css}</style>
-      {locked&&<PinModal onUnlock={handleUnlock}/>}
+    <div style={{display:"flex",height:"100vh",overflow:"hidden",fontFamily:"Georgia,serif",fontSize,background:bgBase,color:ink}}>
 
+      {locked&&<PinModal onUnlock={handleUnlock} surface={surface} border={border} ink={ink} ink2={ink2} accent={accent}/>}
+
+      {/* OTD modal */}
       {showOTD&&onThisDay.length>0&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(28,24,20,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setShowOTD(false)}>
-          <div style={{background:"var(--surface)",borderRadius:18,padding:28,maxWidth:460,width:"90%",maxHeight:"72vh",overflowY:"auto",border:"1px solid var(--border)"}} onClick={e=>e.stopPropagation()}>
-            <p style={{fontSize:11,letterSpacing:1.5,color:"var(--ink2)",textTransform:"uppercase",marginBottom:14,fontFamily:"system-ui"}}>On this day</p>
+        <div style={{position:"fixed",inset:0,background:"rgba(28,24,20,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setShowOTD(false)}>
+          <div style={{...card,maxWidth:460,width:"90%",maxHeight:"72vh",overflowY:"auto",borderRadius:18,padding:28}} onClick={e=>e.stopPropagation()}>
+            <p style={{fontSize:11,letterSpacing:1.5,color:ink2,textTransform:"uppercase",marginBottom:14,fontFamily:"system-ui"}}>On this day</p>
             {onThisDay.map(e=>(
-              <div key={e.id} onClick={()=>{openEntry(e);setShowOTD(false);}} style={{padding:"12px 14px",borderRadius:12,background:"var(--surface2)",marginBottom:10,cursor:"pointer",border:"1px solid var(--border)"}}>
+              <div key={e.id} onClick={()=>{openEntry(e);setShowOTD(false);}} style={{padding:"12px 14px",borderRadius:12,background:surface2,marginBottom:10,cursor:"pointer",border:`1px solid ${border}`}}>
                 <div style={{fontWeight:600,marginBottom:3}}>{e.title||"Untitled"}</div>
-                <div style={{color:"var(--ink2)",fontSize:12,marginBottom:6}}>{fmtDate(e.date)}</div>
-                <div style={{color:"var(--ink2)",fontSize:13}}>{e.body.slice(0,90).replace(/[#*`\n]/g,"").trim()}…</div>
+                <div style={{color:ink2,fontSize:12,marginBottom:6,fontFamily:"system-ui"}}>{fmtDate(e.date)}</div>
+                <div style={{color:ink2,fontSize:13}}>{e.body.slice(0,90).replace(/[#*`\n]/g,"").trim()}…</div>
               </div>
             ))}
-            <button onClick={()=>setShowOTD(false)} style={{...btnBase,marginTop:4,padding:"8px 18px",borderRadius:10,background:"var(--surface2)",color:"var(--ink2)",fontSize:13}}>Close</button>
+            <button onClick={()=>setShowOTD(false)} style={{...btn,marginTop:4,padding:"8px 18px",borderRadius:10,background:surface2,color:ink2,fontSize:13}}>Close</button>
           </div>
         </div>
       )}
 
-      <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
-
-        {/* Sidebar */}
-        {sidebarOpen&&(
-        <div style={{width:248,background:"var(--surface)",borderRight:`1px solid ${border}`,display:"flex",flexDirection:"column",flexShrink:0}}>
-          {/* Logo */}
-          <div style={{padding:"18px 18px 12px",borderBottom:`1px solid ${border}`}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:9}}>
-                <div style={{width:28,height:28,borderRadius:8,background:accent,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2h10v1.5H2V2zm0 3h10v1H2V5zm0 2.5h7v1H2v-1zm0 2.5h5v1H2V10z" fill="white" fillOpacity=".9"/></svg>
-                </div>
-                <span style={{fontWeight:700,fontSize:16,color:"var(--ink)",letterSpacing:-.3,fontFamily:"system-ui"}}>Folio</span>
+      {/* ── SIDEBAR ── */}
+      {sidebarOpen&&(
+      <div style={{width:248,background:surface,borderRight:`1px solid ${border}`,display:"flex",flexDirection:"column",flexShrink:0}}>
+        <div style={{padding:"18px 18px 12px",borderBottom:`1px solid ${border}`}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:9}}>
+              <div style={{width:28,height:28,borderRadius:8,background:accent,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2h10v1.5H2V2zm0 3h10v1H2V5zm0 2.5h7v1H2v-1zm0 2.5h5v1H2V10z" fill="white" fillOpacity=".9"/></svg>
               </div>
-              <div style={{display:"flex",gap:2}}>
-                {onThisDay.length>0&&<button title="On this day" onClick={()=>setShowOTD(true)} style={{...btnBase,padding:"4px 7px",borderRadius:8,background:"transparent",color:"var(--ink2)",fontSize:13}}>◷</button>}
-                <button onClick={()=>{setDark(!dark);save({dark:!dark});}} style={{...btnBase,padding:"4px 7px",borderRadius:8,background:"transparent",color:"var(--ink2)",fontSize:13}}>{dark?"○":"●"}</button>
-              </div>
+              <span style={{fontWeight:700,fontSize:16,color:ink,letterSpacing:-.3,fontFamily:"system-ui"}}>Folio</span>
             </div>
-            {!writtenToday&&(
-              <div style={{background:`${accent}14`,border:`1px solid ${accent}30`,borderRadius:9,padding:"7px 11px",fontSize:12,color:accent,marginBottom:12,fontFamily:"system-ui",display:"flex",gap:6,alignItems:"center"}}>
-                <span style={{opacity:.7}}>✦</span> You haven't written today
-              </div>
-            )}
-            <div style={{position:"relative"}}>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search entries…"
-                style={{width:"100%",padding:"8px 12px 8px 32px",borderRadius:9,border:`1px solid ${border}`,background:"var(--surface2)",color:"var(--ink)",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
-              <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"var(--ink3)",fontSize:13,pointerEvents:"none"}}>⌕</span>
+            <div style={{display:"flex",gap:2}}>
+              {onThisDay.length>0&&<button title="On this day" onClick={()=>setShowOTD(true)} style={{...btn,padding:"4px 7px",borderRadius:8,background:"transparent",color:ink2,fontSize:13}}>◷</button>}
+              <button onClick={()=>{setDark(!dark);save({dark:!dark});}} style={{...btn,padding:"4px 7px",borderRadius:8,background:"transparent",color:ink2,fontSize:13}}>{dark?"○":"●"}</button>
             </div>
           </div>
-
-          {/* Tag filters */}
-          {tags.length>0&&(
-            <div style={{padding:"10px 14px 6px",borderBottom:`1px solid ${border}`,display:"flex",gap:5,flexWrap:"wrap"}}>
-              <button onClick={()=>setFilterTag(null)} style={pill(!filterTag,accent)}>All</button>
-              {tags.map(t=><button key={t.id} onClick={()=>setFilterTag(filterTag===t.name?null:t.name)} style={pill(filterTag===t.name,t.color)}>{t.name}</button>)}
+          {!writtenToday&&(
+            <div style={{background:`${accent}14`,border:`1px solid ${accent}30`,borderRadius:9,padding:"7px 11px",fontSize:12,color:accent,marginBottom:12,fontFamily:"system-ui",display:"flex",gap:6,alignItems:"center"}}>
+              <span style={{opacity:.7}}>✦</span> You haven't written today
             </div>
           )}
+          <div style={{position:"relative"}}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search entries…"
+              style={{width:"100%",padding:"8px 12px 8px 30px",borderRadius:9,border:`1px solid ${border}`,background:surface2,color:ink,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"system-ui"}}/>
+            <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:ink3,fontSize:13,pointerEvents:"none"}}>⌕</span>
+          </div>
+        </div>
 
-          {/* Entry list */}
-          <div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>
-            {filtered.length===0&&(
-              <div style={{padding:"32px 20px",color:"var(--ink3)",fontSize:13,textAlign:"center",fontFamily:"system-ui"}}>
-                {entries.length===0?"Begin your first entry →":"No entries found"}
+        {tags.length>0&&(
+          <div style={{padding:"10px 14px 6px",borderBottom:`1px solid ${border}`,display:"flex",gap:5,flexWrap:"wrap"}}>
+            <button onClick={()=>setFilterTag(null)} style={pill(!filterTag,accent)}>All</button>
+            {tags.map(t=><button key={t.id} onClick={()=>setFilterTag(filterTag===t.name?null:t.name)} style={pill(filterTag===t.name,t.color)}>{t.name}</button>)}
+          </div>
+        )}
+
+        <div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>
+          {filtered.length===0&&(
+            <div style={{padding:"32px 20px",color:ink3,fontSize:13,textAlign:"center",fontFamily:"system-ui"}}>
+              {entries.length===0?"Begin your first entry →":"No entries found"}
+            </div>
+          )}
+          {filtered.map(e=>(
+            <div key={e.id} onClick={()=>openEntry(e)} style={{padding:"10px 16px",cursor:"pointer",borderLeft:`2px solid ${selected?.id===e.id?accent:"transparent"}`,background:selected?.id===e.id?surface2:"transparent",transition:"all .12s"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
+                <span style={{fontWeight:600,fontSize:13.5,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:selected?.id===e.id?accent:ink}}>{e.pinned?"· ":""}{e.title||"Untitled"}</span>
+                <span style={{fontSize:13}}>{MOODS[e.mood]}</span>
               </div>
-            )}
-            {filtered.map(e=>(
-              <div key={e.id} onClick={()=>openEntry(e)} style={{padding:"10px 16px",cursor:"pointer",borderLeft:`2px solid ${selected?.id===e.id?accent:"transparent"}`,background:selected?.id===e.id?"var(--surface2)":"transparent",transition:"all .12s"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
-                  <span style={{fontWeight:600,fontSize:13.5,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:selected?.id===e.id?accent:"var(--ink)"}}>{e.pinned?"· ":""}{e.title||"Untitled"}</span>
-                  <span style={{fontSize:13}}>{MOODS[e.mood]}</span>
+              <div style={{color:ink3,fontSize:11,marginTop:2,fontFamily:"system-ui"}}>{fmtDate(e.date)}</div>
+              {e.tags?.length>0&&(
+                <div style={{display:"flex",gap:4,marginTop:5,flexWrap:"wrap"}}>
+                  {e.tags.map(t=>{const o=tags.find(x=>x.name===t);return o?<span key={t} style={{padding:"1px 7px",borderRadius:8,background:`${o.color}18`,color:o.color,fontSize:11,fontFamily:"system-ui"}}>{t}</span>:null;})}
                 </div>
-                <div style={{color:"var(--ink3)",fontSize:11,marginTop:2,fontFamily:"system-ui"}}>{fmtDate(e.date)}</div>
-                {e.tags?.length>0&&(
-                  <div style={{display:"flex",gap:4,marginTop:5,flexWrap:"wrap"}}>
-                    {e.tags.map(t=>{const o=tags.find(x=>x.name===t);return o?<span key={t} style={{padding:"1px 7px",borderRadius:8,background:`${o.color}18`,color:o.color,fontSize:11,fontFamily:"system-ui"}}>{t}</span>:null;})}
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{borderTop:`1px solid ${border}`,padding:"10px 12px"}}>
+          {["journal","stats","settings"].map(t=>(
+            <button key={t} onClick={()=>setTab(t)} style={{...btn,display:"block",width:"100%",padding:"8px 12px",borderRadius:9,background:tab===t?`${accent}18`:"transparent",color:tab===t?accent:ink2,textAlign:"left",fontSize:13,marginBottom:2}}>
+              {t==="journal"?"Journal":t==="stats"?"Statistics":"Settings"}
+            </button>
+          ))}
+        </div>
+      </div>
+      )}
+
+      {/* ── MAIN ── */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+        {/* ── JOURNAL TAB ── */}
+        {tab==="journal"&&(
+        <>
+          <div style={{padding:"12px 24px",borderBottom:`1px solid ${border}`,display:"flex",gap:8,alignItems:"center",background:surface}}>
+            <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{...btn,padding:"6px 10px",borderRadius:8,background:"transparent",color:ink2,fontSize:16}}>☰</button>
+            <div style={{width:1,height:18,background:border,margin:"0 4px"}}/>
+            <div style={{position:"relative"}}>
+              <button onClick={()=>setShowTemplate(!showTemplate)} style={{...btn,padding:"7px 16px",borderRadius:9,background:accent,color:"#fff",fontSize:13}}>+ New entry</button>
+              {showTemplate&&(
+                <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,background:surface,border:`1px solid ${border}`,borderRadius:12,padding:6,zIndex:100,minWidth:170,boxShadow:"0 8px 24px rgba(0,0,0,.12)"}}>
+                  {Object.keys(TEMPLATES).map(t=>(
+                    <button key={t} onClick={()=>openNew(t)} style={{...btn,display:"block",width:"100%",padding:"8px 14px",borderRadius:8,background:"transparent",color:ink,textAlign:"left",fontSize:13}}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{flex:1}}/>
+            <button onClick={exportEntries} style={{...btn,padding:"6px 13px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:ink2,fontSize:12}}>Export ↓</button>
+          </div>
+
+          {(editing||selected) ? (
+          <div style={{flex:1,overflowY:"auto",padding:"32px 40px",maxWidth:760,width:"100%",margin:"0 auto",boxSizing:"border-box"}}>
+            {editing ? (
+            <>
+              <input value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})} placeholder="Entry title"
+                style={{width:"100%",fontSize:26,fontWeight:600,border:"none",borderBottom:`1.5px solid ${border}`,background:"transparent",color:ink,padding:"4px 0 10px",outline:"none",marginBottom:20,letterSpacing:-.3,fontFamily:"Georgia,serif"}}/>
+              <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:16}}>
+                <span style={{color:ink3,fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontFamily:"system-ui"}}>Mood</span>
+                {MOODS.map((m,i)=>(
+                  <span key={i} onClick={()=>setDraft({...draft,mood:i})}
+                    style={{fontSize:20,cursor:"pointer",opacity:draft.mood===i?1:.25,transition:"all .15s",transform:draft.mood===i?"scale(1.2)":"scale(1)",display:"inline-block"}}>{m}</span>
+                ))}
+              </div>
+              {tags.length>0&&(
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:18}}>
+                  {tags.map(t=>(
+                    <button key={t.id} onClick={()=>{const tgs=draft.tags.includes(t.name)?draft.tags.filter(x=>x!==t.name):[...draft.tags,t.name];setDraft({...draft,tags:tgs});}}
+                      style={pill(draft.tags.includes(t.name),t.color)}>{t.name}</button>
+                  ))}
+                </div>
+              )}
+              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+                <button onClick={()=>setPreview(!preview)} style={{...btn,padding:"4px 12px",borderRadius:8,border:`1px solid ${border}`,background:preview?accent:"transparent",color:preview?"#fff":ink2,fontSize:12}}>
+                  {preview?"Edit":"Preview"}
+                </button>
+              </div>
+              {preview ? (
+                <div style={{background:surface,borderRadius:14,padding:"24px 28px",minHeight:300,lineHeight:1.85,color:ink,border:`1px solid ${border}`}} dangerouslySetInnerHTML={{__html:md(draft.body)}}/>
+              ) : (
+                <textarea value={draft.body} onChange={e=>setDraft({...draft,body:e.target.value})} placeholder="Begin writing…"
+                  style={{width:"100%",minHeight:340,background:surface,border:`1px solid ${border}`,borderRadius:14,padding:"20px 24px",color:ink,fontSize,lineHeight:1.85,resize:"vertical",outline:"none",fontFamily:"Georgia,serif"}}/>
+              )}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14}}>
+                <span style={{color:ink3,fontSize:12,fontFamily:"system-ui"}}>{wc(draft.body).toLocaleString()} words · {rt(draft.body)} min · Autosaving</span>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>setEditing(false)} style={{...btn,padding:"8px 18px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:ink2,fontSize:13}}>Cancel</button>
+                  <button onClick={saveEntry} style={{...btn,padding:"8px 20px",borderRadius:9,background:accent,color:"#fff",fontSize:13}}>Save</button>
+                </div>
+              </div>
+            </>
+            ) : selected ? (
+            <>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
+                <div style={{flex:1,marginRight:20}}>
+                  <h1 style={{fontSize:26,fontWeight:600,color:ink,letterSpacing:-.4,marginBottom:8,lineHeight:1.3}}>{selected.title||"Untitled"}</h1>
+                  <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+                    <span style={{color:ink3,fontSize:13,fontFamily:"system-ui"}}>{fmtDate(selected.date)}</span>
+                    <span style={{color:ink3,fontFamily:"system-ui"}}>·</span>
+                    <span style={{fontSize:14}}>{MOODS[selected.mood]} {MOOD_LABELS[selected.mood]}</span>
+                    <span style={{color:ink3,fontFamily:"system-ui"}}>·</span>
+                    <span style={{color:ink3,fontSize:13,fontFamily:"system-ui"}}>{wc(selected.body).toLocaleString()} words</span>
                   </div>
-                )}
+                  {selected.tags?.length>0&&(
+                    <div style={{display:"flex",gap:5,marginTop:10,flexWrap:"wrap"}}>
+                      {selected.tags.map(t=>{const o=tags.find(x=>x.name===t);return o?<span key={t} style={{padding:"3px 10px",borderRadius:10,background:`${o.color}15`,color:o.color,fontSize:12,fontFamily:"system-ui"}}>{t}</span>:null;})}
+                    </div>
+                  )}
+                </div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <button onClick={()=>togglePin(selected.id)} style={{...btn,padding:"7px 11px",borderRadius:9,border:`1px solid ${border}`,background:selected.pinned?`${accent}18`:"transparent",color:selected.pinned?accent:ink2,fontSize:13}}>
+                    {selected.pinned?"⊕":"○"}
+                  </button>
+                  <button onClick={()=>setEditing(true)} style={{...btn,padding:"7px 16px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:ink,fontSize:13}}>Edit</button>
+                  <button onClick={()=>deleteEntry(selected.id)} style={{...btn,padding:"7px 13px",borderRadius:9,border:"none",background:"#B5654A14",color:"#B5654A",fontSize:13}}>Delete</button>
+                </div>
+              </div>
+              <div style={{height:1,background:border,marginBottom:28}}/>
+              <div style={{lineHeight:1.9,color:ink,fontSize}} dangerouslySetInnerHTML={{__html:md(selected.body)}}/>
+            </>
+            ):null}
+          </div>
+          ) : (
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:ink3}}>
+            <div style={{width:56,height:56,borderRadius:16,background:`${accent}18`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M4 4h14v2H4V4zm0 4h14v1.5H4V8zm0 3.5h10v1.5H4V11.5zm0 3.5h8v1.5H4V15z" fill={accent} fillOpacity=".8"/></svg>
+            </div>
+            <p style={{fontSize:14,fontFamily:"system-ui"}}>Select an entry or start a new one</p>
+          </div>
+          )}
+        </>
+        )}
+
+        {/* ── STATS TAB ── */}
+        {tab==="stats"&&(
+        <div style={{flex:1,overflowY:"auto",padding:"32px 36px"}}>
+          <p style={{fontSize:11,letterSpacing:1.5,color:ink3,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:20}}>Your statistics</p>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:12,marginBottom:28}}>
+            {[{label:"Entries",val:entries.length},{label:"Total words",val:totalWords.toLocaleString()},{label:"Avg. length",val:`${avgLen} w`},{label:"Current streak",val:`${streak}d`},{label:"Best streak",val:`${longest}d`}].map(c=>(
+              <div key={c.label} style={{background:surface,borderRadius:14,padding:"16px 18px",border:`1px solid ${border}`}}>
+                <div style={{fontSize:11,color:ink3,letterSpacing:.8,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:6}}>{c.label}</div>
+                <div style={{fontSize:24,fontWeight:600,color:accent,fontFamily:"system-ui",letterSpacing:-.5}}>{c.val}</div>
               </div>
             ))}
           </div>
 
-          {/* Nav */}
-          <div style={{borderTop:`1px solid ${border}`,padding:"10px 12px"}}>
-            {["journal","stats","settings"].map(t=>(
-              <button key={t} onClick={()=>setTab(t)} style={{...btnBase,display:"block",width:"100%",padding:"8px 12px",borderRadius:9,background:tab===t?"var(--accent-soft)":"transparent",color:tab===t?accent:"var(--ink2)",textAlign:"left",fontSize:13,fontFamily:"system-ui",marginBottom:2}}>
-                {t==="journal"?"Journal":t==="stats"?"Statistics":"Settings"}
-              </button>
+          <div style={{background:surface,borderRadius:14,padding:"20px 22px",marginBottom:14,border:`1px solid ${border}`}}>
+            <p style={{fontSize:11,letterSpacing:1.2,color:ink3,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Mood distribution</p>
+            {moodData.map((m,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:9}}>
+                <span style={{width:22,fontSize:15,textAlign:"center"}}>{m.m}</span>
+                <span style={{width:52,fontSize:12,color:ink3,fontFamily:"system-ui"}}>{m.label}</span>
+                <div style={{flex:1,background:surface2,borderRadius:6,height:7,overflow:"hidden"}}>
+                  <div style={{height:"100%",borderRadius:6,background:accent,width:`${entries.length?Math.round(m.count/entries.length*100):0}%`,transition:"width .7s ease"}}/>
+                </div>
+                <span style={{fontSize:12,color:ink3,fontFamily:"system-ui",width:30,textAlign:"right"}}>{m.count}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{background:surface,borderRadius:14,padding:"20px 22px",marginBottom:14,border:`1px solid ${border}`}}>
+            <p style={{fontSize:11,letterSpacing:1.2,color:ink3,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Entries per week</p>
+            <div style={{display:"flex",gap:5,alignItems:"flex-end",height:80}}>
+              {weekData.length===0&&<span style={{color:ink3,fontSize:13,fontFamily:"system-ui"}}>No data yet</span>}
+              {weekData.map((w,i)=>{
+                const max=Math.max(...weekData.map(x=>x.count),1);
+                return(
+                  <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                    <div style={{width:"100%",background:accent,borderRadius:"3px 3px 0 0",height:`${Math.round(w.count/max*66)}px`,minHeight:3,opacity:.85}}/>
+                    <span style={{fontSize:9,color:ink3,fontFamily:"system-ui"}}>{w.week}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{background:surface,borderRadius:14,padding:"20px 22px",border:`1px solid ${border}`}}>
+            <p style={{fontSize:11,letterSpacing:1.2,color:ink3,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Tag usage</p>
+            {tagUsage.length===0&&<span style={{color:ink3,fontSize:13,fontFamily:"system-ui"}}>Create tags in settings to track them</span>}
+            {tagUsage.map(t=>(
+              <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:9}}>
+                <span style={{padding:"2px 9px",borderRadius:8,background:`${t.color}15`,color:t.color,fontSize:12,minWidth:72,textAlign:"center",fontFamily:"system-ui"}}>{t.name}</span>
+                <div style={{flex:1,background:surface2,borderRadius:6,height:7,overflow:"hidden"}}>
+                  <div style={{height:"100%",borderRadius:6,background:t.color,width:`${entries.length?Math.round(t.count/entries.length*100):0}%`,transition:"width .7s ease"}}/>
+                </div>
+                <span style={{fontSize:12,color:ink3,fontFamily:"system-ui",width:24,textAlign:"right"}}>{t.count}</span>
+              </div>
             ))}
           </div>
         </div>
         )}
 
-        {/* Main area */}
-        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--bg)"}}>
+        {/* ── SETTINGS TAB ── */}
+        {tab==="settings"&&(
+        <div style={{flex:1,overflowY:"auto",padding:"32px 36px"}}>
+          <p style={{fontSize:11,letterSpacing:1.5,color:ink3,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:22}}>Preferences</p>
 
-          {tab==="journal"&&(
-            <>
-              {/* Top bar */}
-              <div style={{padding:"12px 24px",borderBottom:`1px solid ${border}`,display:"flex",gap:8,alignItems:"center",background:"var(--surface)"}}>
-                <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{...btnBase,padding:"6px 10px",borderRadius:8,background:"transparent",color:"var(--ink2)",fontSize:16,lineHeight:1}}>☰</button>
-                <div style={{width:1,height:18,background:border,margin:"0 4px"}}/>
-                <div style={{position:"relative"}}>
-                  <button onClick={()=>setShowTemplate(!showTemplate)} style={{...btnBase,padding:"7px 16px",borderRadius:9,background:accent,color:"#fff",fontSize:13}}>
-                    + New entry
-                  </button>
-                  {showTemplate&&(
-                    <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,background:"var(--surface)",border:`1px solid ${border}`,borderRadius:12,padding:6,zIndex:100,minWidth:170,boxShadow:"0 8px 24px rgba(0,0,0,0.12)"}}>
-                      {Object.keys(TEMPLATES).map(t=>(
-                        <button key={t} onClick={()=>openNew(t)} style={{...btnBase,display:"block",width:"100%",padding:"8px 14px",borderRadius:8,background:"transparent",color:"var(--ink)",textAlign:"left",fontSize:13,fontFamily:"system-ui"}}>
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div style={{flex:1}}/>
-                <button onClick={exportEntries} style={{...btnBase,padding:"6px 13px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:"var(--ink2)",fontSize:12,fontFamily:"system-ui"}}>
-                  Export ↓
-                </button>
-              </div>
-
-              {editing||selected ? (
-                <div style={{flex:1,overflowY:"auto",padding:"32px 40px",maxWidth:760,width:"100%",margin:"0 auto"}}>
-                  {editing ? (
-                    <>
-                      <input value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})} placeholder="Entry title"
-                        style={{width:"100%",fontSize:26,fontWeight:600,border:"none",borderBottom:`1.5px solid ${border}`,background:"transparent",color:"var(--ink)",padding:"4px 0 10px",outline:"none",marginBottom:20,letterSpacing:-.3}}/>
-
-                      {/* Mood */}
-                      <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:16}}>
-                        <span style={{color:"var(--ink3)",fontSize:12,letterSpacing:.8,textTransform:"uppercase",fontFamily:"system-ui"}}>Mood</span>
-                        {MOODS.map((m,i)=>(
-                          <span key={i} onClick={()=>setDraft({...draft,mood:i})}
-                            style={{fontSize:20,cursor:"pointer",opacity:draft.mood===i?1:0.28,transition:"opacity .15s",transform:draft.mood===i?"scale(1.2)":"scale(1)",display:"inline-block"}}>
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-
-                      {/* Tags */}
-                      {tags.length>0&&(
-                        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:18}}>
-                          {tags.map(t=>(
-                            <button key={t.id} onClick={()=>{const tgs=draft.tags.includes(t.name)?draft.tags.filter(x=>x!==t.name):[...draft.tags,t.name];setDraft({...draft,tags:tgs});}}
-                              style={pill(draft.tags.includes(t.name),t.color)}>{t.name}</button>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Editor toolbar */}
-                      <div style={{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}>
-                        <span style={{color:"var(--ink3)",fontSize:12,fontFamily:"system-ui"}}>Markdown supported</span>
-                        <div style={{flex:1}}/>
-                        <button onClick={()=>setPreview(!preview)} style={{...btnBase,padding:"4px 12px",borderRadius:8,border:`1px solid ${border}`,background:preview?accent:"transparent",color:preview?"#fff":"var(--ink2)",fontSize:12,fontFamily:"system-ui"}}>
-                          {preview?"Edit":"Preview"}
-                        </button>
-                      </div>
-
-                      {preview ? (
-                        <div style={{background:"var(--surface)",borderRadius:14,padding:"24px 28px",minHeight:300,lineHeight:1.85,color:"var(--ink)",border:`1px solid ${border}`}} dangerouslySetInnerHTML={{__html:md(draft.body)}}/>
-                      ) : (
-                        <textarea value={draft.body} onChange={e=>setDraft({...draft,body:e.target.value})} placeholder="Begin writing…"
-                          style={{width:"100%",minHeight:340,background:"var(--surface)",border:`1px solid ${border}`,borderRadius:14,padding:"20px 24px",color:"var(--ink)",fontSize:fontSize,lineHeight:1.85,resize:"vertical",outline:"none",fontFamily:"'Georgia',serif"}}/>
-                      )}
-
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14}}>
-                        <span style={{color:"var(--ink3)",fontSize:12,fontFamily:"system-ui"}}>{wc(draft.body).toLocaleString()} words · {rt(draft.body)} min · Autosaving</span>
-                        <div style={{display:"flex",gap:8}}>
-                          <button onClick={()=>{setEditing(false);}} style={{...btnBase,padding:"8px 18px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:"var(--ink2)",fontSize:13,fontFamily:"system-ui"}}>Cancel</button>
-                          <button onClick={saveEntry} style={{...btnBase,padding:"8px 20px",borderRadius:9,background:accent,color:"#fff",fontSize:13,fontFamily:"system-ui"}}>Save</button>
-                        </div>
-                      </div>
-                    </>
-                  ) : selected ? (
-                    <>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
-                        <div style={{flex:1,marginRight:20}}>
-                          <h1 style={{fontSize:26,fontWeight:600,color:"var(--ink)",letterSpacing:-.4,marginBottom:8,lineHeight:1.3}}>{selected.title||"Untitled"}</h1>
-                          <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-                            <span style={{color:"var(--ink3)",fontSize:13,fontFamily:"system-ui"}}>{fmtDate(selected.date)}</span>
-                            <span style={{color:"var(--ink3)",fontSize:13,fontFamily:"system-ui"}}>·</span>
-                            <span style={{fontSize:14}}>{MOODS[selected.mood]} {MOOD_LABELS[selected.mood]}</span>
-                            <span style={{color:"var(--ink3)",fontSize:13,fontFamily:"system-ui"}}>·</span>
-                            <span style={{color:"var(--ink3)",fontSize:13,fontFamily:"system-ui"}}>{wc(selected.body).toLocaleString()} words</span>
-                          </div>
-                          {selected.tags?.length>0&&(
-                            <div style={{display:"flex",gap:5,marginTop:10,flexWrap:"wrap"}}>
-                              {selected.tags.map(t=>{const o=tags.find(x=>x.name===t);return o?<span key={t} style={{padding:"3px 10px",borderRadius:10,background:`${o.color}15`,color:o.color,fontSize:12,fontFamily:"system-ui"}}>{t}</span>:null;})}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{display:"flex",gap:6,flexShrink:0}}>
-                          <button onClick={()=>togglePin(selected.id)} title="Pin" style={{...btnBase,padding:"7px 11px",borderRadius:9,border:`1px solid ${border}`,background:selected.pinned?"var(--accent-soft)":"transparent",color:selected.pinned?accent:"var(--ink2)",fontSize:13}}>
-                            {selected.pinned?"⊕":"○"}
-                          </button>
-                          <button onClick={()=>setEditing(true)} style={{...btnBase,padding:"7px 16px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:"var(--ink)",fontSize:13,fontFamily:"system-ui"}}>Edit</button>
-                          <button onClick={()=>deleteEntry(selected.id)} style={{...btnBase,padding:"7px 13px",borderRadius:9,border:"none",background:"#B5654A14",color:"#B5654A",fontSize:13,fontFamily:"system-ui"}}>Delete</button>
-                        </div>
-                      </div>
-                      <div style={{height:1,background:border,marginBottom:28}}/>
-                      <div style={{lineHeight:1.9,color:"var(--ink)",fontSize:fontSize}} dangerouslySetInnerHTML={{__html:md(selected.body)}}/>
-                    </>
-                  ):null}
-                </div>
-              ) : (
-                <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,color:"var(--ink3)"}}>
-                  <div style={{width:56,height:56,borderRadius:16,background:`${accent}18`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M4 4h14v2H4V4zm0 4h14v1.5H4V8zm0 3.5h10v1.5H4V11.5zm0 3.5h8v1.5H4V15z" fill={accent} fillOpacity=".8"/></svg>
-                  </div>
-                  <p style={{fontSize:14,fontFamily:"system-ui"}}>Select an entry or start a new one</p>
-                </div>
-              )}
-            </>
-          )}
-
-          {tab==="stats"&&(
-            <div style={{flex:1,overflowY:"auto",padding:"32px 36px"}}>
-              <p style={{fontSize:11,letterSpacing:1.5,color:"var(--ink3)",textTransform:"uppercase",fontFamily:"system-ui",marginBottom:20}}>Your statistics</p>
-
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:28}}>
-                {[
-                  {label:"Entries",val:entries.length},
-                  {label:"Total words",val:totalWords.toLocaleString()},
-                  {label:"Avg. length",val:`${avgLen.toLocaleString()} w`},
-                  {label:"Current streak",val:`${streak}d`},
-                  {label:"Best streak",val:`${longest}d`},
-                ].map(c=>(
-                  <div key={c.label} style={{background:"var(--surface)",borderRadius:14,padding:"16px 18px",border:`1px solid ${border}`}}>
-                    <div style={{fontSize:11,color:"var(--ink3)",letterSpacing:.8,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:6}}>{c.label}</div>
-                    <div style={{fontSize:24,fontWeight:600,color:accent,fontFamily:"system-ui",letterSpacing:-.5}}>{c.val}</div>
-                  </div>
+          {/* Appearance */}
+          <div style={{background:surface,borderRadius:14,padding:"18px 20px",marginBottom:12,border:`1px solid ${border}`}}>
+            <p style={{fontSize:11,letterSpacing:1.2,color:ink3,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Appearance</p>
+            <Row label="Theme" ink={ink} ink2={ink2}>
+              <button onClick={()=>{setDark(!dark);save({dark:!dark});}} style={{...btn,padding:"7px 16px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:ink,fontSize:13}}>{dark?"Light mode":"Dark mode"}</button>
+            </Row>
+            <Row label="Accent color" ink={ink} ink2={ink2}>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {ACCENT_COLORS.map(c=>(
+                  <div key={c.val} onClick={()=>{setAccent(c.val);save({accent:c.val});}} title={c.name}
+                    style={{width:26,height:26,borderRadius:"50%",background:c.val,cursor:"pointer",border:accent===c.val?`3px solid ${ink}`:"2px solid transparent",transition:"border .15s"}}/>
                 ))}
               </div>
+            </Row>
+            <Row label={`Font size — ${fontSize}px`} ink={ink} ink2={ink2}>
+              <input type="range" min={13} max={19} step={1} value={fontSize} onChange={e=>{setFontSize(+e.target.value);save({fontSize:+e.target.value});}} style={{width:120,accentColor:accent}}/>
+            </Row>
+          </div>
 
-              {/* Mood */}
-              <div style={{background:"var(--surface)",borderRadius:14,padding:"20px 22px",marginBottom:14,border:`1px solid ${border}`}}>
-                <p style={{fontSize:11,letterSpacing:1.2,color:"var(--ink3)",textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Mood distribution</p>
-                {moodData.map((m,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:9}}>
-                    <span style={{width:22,fontSize:15,textAlign:"center"}}>{m.m}</span>
-                    <span style={{width:52,fontSize:12,color:"var(--ink3)",fontFamily:"system-ui"}}>{m.label}</span>
-                    <div style={{flex:1,background:"var(--surface2)",borderRadius:6,height:7,overflow:"hidden"}}>
-                      <div style={{height:"100%",borderRadius:6,background:accent,width:`${entries.length?Math.round(m.count/entries.length*100):0}%`,transition:"width .7s ease"}}/>
-                    </div>
-                    <span style={{fontSize:12,color:"var(--ink3)",fontFamily:"system-ui",width:30,textAlign:"right"}}>{m.count}</span>
-                  </div>
-                ))}
+          {/* Tags */}
+          <div style={{background:surface,borderRadius:14,padding:"18px 20px",marginBottom:12,border:`1px solid ${border}`}}>
+            <p style={{fontSize:11,letterSpacing:1.2,color:ink3,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Tags</p>
+            <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+              <input value={newTagName} onChange={e=>setNewTagName(e.target.value)} placeholder="Tag name" onKeyDown={e=>e.key==="Enter"&&addTag()}
+                style={{flex:1,padding:"8px 12px",borderRadius:9,border:`1px solid ${border}`,background:bgBase,color:ink,fontSize:13,fontFamily:"system-ui",outline:"none"}}/>
+              <div style={{display:"flex",gap:5}}>
+                {TAGS_PALETTE.map(c=><div key={c} onClick={()=>setNewTagColor(c)} style={{width:18,height:18,borderRadius:"50%",background:c,cursor:"pointer",border:newTagColor===c?`2.5px solid ${ink}`:"2px solid transparent"}}/>)}
               </div>
-
-              {/* Weekly */}
-              <div style={{background:"var(--surface)",borderRadius:14,padding:"20px 22px",marginBottom:14,border:`1px solid ${border}`}}>
-                <p style={{fontSize:11,letterSpacing:1.2,color:"var(--ink3)",textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Entries per week</p>
-                <div style={{display:"flex",gap:5,alignItems:"flex-end",height:80}}>
-                  {weekData.length===0&&<span style={{color:"var(--ink3)",fontSize:13,fontFamily:"system-ui"}}>No data yet</span>}
-                  {weekData.map((w,i)=>{
-                    const max=Math.max(...weekData.map(x=>x.count),1);
-                    return(
-                      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-                        <div style={{width:"100%",background:accent,borderRadius:"3px 3px 0 0",height:`${Math.round(w.count/max*66)}px`,minHeight:3,opacity:.85}}/>
-                        <span style={{fontSize:9,color:"var(--ink3)",fontFamily:"system-ui"}}>{w.week}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Tag usage */}
-              <div style={{background:"var(--surface)",borderRadius:14,padding:"20px 22px",border:`1px solid ${border}`}}>
-                <p style={{fontSize:11,letterSpacing:1.2,color:"var(--ink3)",textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Tag usage</p>
-                {tagUsage.length===0&&<span style={{color:"var(--ink3)",fontSize:13,fontFamily:"system-ui"}}>Create tags in settings to track them</span>}
-                {tagUsage.map(t=>(
-                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:9}}>
-                    <span style={{padding:"2px 9px",borderRadius:8,background:`${t.color}15`,color:t.color,fontSize:12,minWidth:72,textAlign:"center",fontFamily:"system-ui"}}>{t.name}</span>
-                    <div style={{flex:1,background:"var(--surface2)",borderRadius:6,height:7,overflow:"hidden"}}>
-                      <div style={{height:"100%",borderRadius:6,background:t.color,width:`${entries.length?Math.round(t.count/entries.length*100):0}%`,transition:"width .7s ease"}}/>
-                    </div>
-                    <span style={{fontSize:12,color:"var(--ink3)",fontFamily:"system-ui",width:24,textAlign:"right"}}>{t.count}</span>
-                  </div>
-                ))}
-              </div>
+              <button onClick={addTag} style={{...btn,padding:"8px 14px",borderRadius:9,background:accent,color:"#fff",fontSize:13}}>Add</button>
             </div>
-          )}
-
-          {tab==="settings"&&(
-            <div style={{flex:1,overflowY:"auto",padding:"32px 36px"}}>
-              <p style={{fontSize:11,letterSpacing:1.5,color:"var(--ink3)",textTransform:"uppercase",fontFamily:"system-ui",marginBottom:22}}>Preferences</p>
-
-              {[
-                {title:"Appearance",children:(
-                  <>
-                    <Row2 label="Theme">
-                      <button onClick={()=>{setDark(!dark);save({dark:!dark});}} style={{...btnBase,padding:"7px 16px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:"var(--ink)",fontSize:13,fontFamily:"system-ui"}}>{dark?"Light mode":"Dark mode"}</button>
-                    </Row2>
-                    <Row2 label="Accent color">
-                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                        {ACCENT_COLORS.map(c=>(
-                          <div key={c.val} onClick={()=>{setAccent(c.val);save({accent:c.val});}} title={c.name}
-                            style={{width:26,height:26,borderRadius:"50%",background:c.val,cursor:"pointer",border:accent===c.val?`3px solid var(--ink)`:`2px solid transparent`,transition:"border .15s"}}/>
-                        ))}
-                      </div>
-                    </Row2>
-                    <Row2 label={`Font size — ${fontSize}px`}>
-                      <input type="range" min={13} max={19} step={1} value={fontSize} onChange={e=>{setFontSize(+e.target.value);save({fontSize:+e.target.value});}} style={{width:120,accentColor:accent}}/>
-                    </Row2>
-                  </>
-                )},
-                {title:"Tags",children:(
-                  <>
-                    <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
-                      <input value={newTagName} onChange={e=>setNewTagName(e.target.value)} placeholder="Tag name" onKeyDown={e=>e.key==="Enter"&&addTag()}
-                        style={{flex:1,padding:"8px 12px",borderRadius:9,border:`1px solid ${border}`,background:"var(--bg)",color:"var(--ink)",fontSize:13,fontFamily:"system-ui",outline:"none"}}/>
-                      <div style={{display:"flex",gap:5}}>
-                        {TAGS_PALETTE.map(c=><div key={c} onClick={()=>setNewTagColor(c)} style={{width:18,height:18,borderRadius:"50%",background:c,cursor:"pointer",border:newTagColor===c?"2.5px solid var(--ink)":"2px solid transparent"}}/>)}
-                      </div>
-                      <button onClick={addTag} style={{...btnBase,padding:"8px 14px",borderRadius:9,background:accent,color:"#fff",fontSize:13,fontFamily:"system-ui"}}>Add</button>
-                    </div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                      {tags.map(t=>(
-                        <div key={t.id} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:10,background:`${t.color}14`,border:`1px solid ${t.color}30`}}>
-                          <span style={{color:t.color,fontSize:13,fontFamily:"system-ui"}}>{t.name}</span>
-                          <span onClick={()=>{const u=tags.filter(x=>x.id!==t.id);setTags(u);save({tags:u});}} style={{color:t.color,cursor:"pointer",fontSize:15,lineHeight:1,opacity:.7}}>×</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )},
-                {title:"Daily reminder",children:(
-                  <>
-                    <Row2 label="Time">
-                      <input type="time" value={reminder} onChange={e=>{setReminder(e.target.value);save({reminder:e.target.value});}}
-                        style={{padding:"7px 10px",borderRadius:9,border:`1px solid ${border}`,background:"var(--bg)",color:"var(--ink)",fontFamily:"system-ui",fontSize:13}}/>
-                    </Row2>
-                    <Row2 label="Notifications">
-                      <button onClick={()=>{if(!reminderOn&&Notification.permission!=="granted")Notification.requestPermission();setReminderOn(!reminderOn);save({reminderOn:!reminderOn});}}
-                        style={{...btnBase,padding:"7px 18px",borderRadius:9,border:`1px solid ${border}`,background:reminderOn?accent:"transparent",color:reminderOn?"#fff":"var(--ink)",fontSize:13,fontFamily:"system-ui"}}>
-                        {reminderOn?"Enabled":"Disabled"}
-                      </button>
-                    </Row2>
-                  </>
-                )},
-                {title:"Privacy",children:(
-                  <>
-                    {pinEnabled ? (
-                      <Row2 label="PIN lock is enabled">
-                        <button onClick={()=>{setPinEnabled(false);setPin("");save({pinEnabled:false,pin:""}); }} style={{...btnBase,padding:"7px 16px",borderRadius:9,border:"none",background:"#B5654A14",color:"#B5654A",fontSize:13,fontFamily:"system-ui"}}>Remove PIN</button>
-                      </Row2>
-                    ) : showPinSetup ? (
-                      <div style={{display:"flex",gap:8}}>
-                        <input type="password" placeholder="Min 4 digits" value={newPin} onChange={e=>setNewPin(e.target.value)}
-                          style={{padding:"7px 12px",borderRadius:9,border:`1px solid ${border}`,background:"var(--bg)",color:"var(--ink)",fontFamily:"system-ui",fontSize:13,outline:"none",width:140}}/>
-                        <button onClick={enablePin} style={{...btnBase,padding:"7px 16px",borderRadius:9,background:accent,color:"#fff",fontSize:13,fontFamily:"system-ui"}}>Set PIN</button>
-                        <button onClick={()=>setShowPinSetup(false)} style={{...btnBase,padding:"7px 14px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:"var(--ink2)",fontSize:13,fontFamily:"system-ui"}}>Cancel</button>
-                      </div>
-                    ) : (
-                      <button onClick={()=>setShowPinSetup(true)} style={{...btnBase,padding:"8px 18px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:"var(--ink)",fontSize:13,fontFamily:"system-ui"}}>Set up PIN lock</button>
-                    )}
-                  </>
-                )},
-                {title:"Data",children:(
-                  <button onClick={exportEntries} style={{...btnBase,padding:"8px 18px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:"var(--ink)",fontSize:13,fontFamily:"system-ui"}}>Export all entries as .txt</button>
-                )},
-              ].map(s=>(
-                <div key={s.title} style={{background:"var(--surface)",borderRadius:14,padding:"18px 20px",marginBottom:12,border:`1px solid ${border}`}}>
-                  <p style={{fontSize:11,letterSpacing:1.2,color:"var(--ink3)",textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>{s.title}</p>
-                  {s.children}
+            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+              {tags.map(t=>(
+                <div key={t.id} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:10,background:`${t.color}14`,border:`1px solid ${t.color}30`}}>
+                  <span style={{color:t.color,fontSize:13,fontFamily:"system-ui"}}>{t.name}</span>
+                  <span onClick={()=>{const u=tags.filter(x=>x.id!==t.id);setTags(u);save({tags:u});}} style={{color:t.color,cursor:"pointer",fontSize:15,lineHeight:1,opacity:.7}}>×</span>
                 </div>
               ))}
             </div>
-          )}
+          </div>
+
+          {/* Reminder */}
+          <div style={{background:surface,borderRadius:14,padding:"18px 20px",marginBottom:12,border:`1px solid ${border}`}}>
+            <p style={{fontSize:11,letterSpacing:1.2,color:ink3,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Daily reminder</p>
+            <Row label="Time" ink={ink} ink2={ink2}>
+              <input type="time" value={reminder} onChange={e=>{setReminder(e.target.value);save({reminder:e.target.value});}}
+                style={{padding:"7px 10px",borderRadius:9,border:`1px solid ${border}`,background:bgBase,color:ink,fontFamily:"system-ui",fontSize:13}}/>
+            </Row>
+            <Row label="Notifications" ink={ink} ink2={ink2}>
+              <button onClick={()=>{if(!reminderOn&&Notification.permission!=="granted")Notification.requestPermission();setReminderOn(!reminderOn);save({reminderOn:!reminderOn});}}
+                style={{...btn,padding:"7px 18px",borderRadius:9,border:`1px solid ${border}`,background:reminderOn?accent:"transparent",color:reminderOn?"#fff":ink,fontSize:13}}>
+                {reminderOn?"Enabled":"Disabled"}
+              </button>
+            </Row>
+          </div>
+
+          {/* PIN */}
+          <div style={{background:surface,borderRadius:14,padding:"18px 20px",marginBottom:12,border:`1px solid ${border}`}}>
+            <p style={{fontSize:11,letterSpacing:1.2,color:ink3,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Privacy</p>
+            {pinEnabled ? (
+              <Row label="PIN lock is enabled" ink={ink} ink2={ink2}>
+                <button onClick={()=>{setPinEnabled(false);setPin("");save({pinEnabled:false,pin:""}); }} style={{...btn,padding:"7px 16px",borderRadius:9,border:"none",background:"#B5654A14",color:"#B5654A",fontSize:13}}>Remove PIN</button>
+              </Row>
+            ) : showPinSetup ? (
+              <div style={{display:"flex",gap:8}}>
+                <input type="password" placeholder="Min 4 digits" value={newPin} onChange={e=>setNewPin(e.target.value)}
+                  style={{padding:"7px 12px",borderRadius:9,border:`1px solid ${border}`,background:bgBase,color:ink,fontFamily:"system-ui",fontSize:13,outline:"none",width:140}}/>
+                <button onClick={enablePin} style={{...btn,padding:"7px 16px",borderRadius:9,background:accent,color:"#fff",fontSize:13}}>Set PIN</button>
+                <button onClick={()=>setShowPinSetup(false)} style={{...btn,padding:"7px 14px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:ink2,fontSize:13}}>Cancel</button>
+              </div>
+            ) : (
+              <button onClick={()=>setShowPinSetup(true)} style={{...btn,padding:"8px 18px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:ink,fontSize:13}}>Set up PIN lock</button>
+            )}
+          </div>
+
+          {/* Export */}
+          <div style={{background:surface,borderRadius:14,padding:"18px 20px",border:`1px solid ${border}`}}>
+            <p style={{fontSize:11,letterSpacing:1.2,color:ink3,textTransform:"uppercase",fontFamily:"system-ui",marginBottom:14}}>Data</p>
+            <button onClick={exportEntries} style={{...btn,padding:"8px 18px",borderRadius:9,border:`1px solid ${border}`,background:"transparent",color:ink,fontSize:13}}>Export all entries as .txt</button>
+          </div>
         </div>
+        )}
+
       </div>
-    </>
+    </div>
   );
 }
 
-function Row2({label,children}){
+function Row({label,children,ink,ink2}){
   return(
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-      <span style={{fontSize:13,color:"var(--ink)",fontFamily:"system-ui"}}>{label}</span>
+      <span style={{fontSize:13,color:ink,fontFamily:"system-ui"}}>{label}</span>
       {children}
     </div>
   );
 }
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
